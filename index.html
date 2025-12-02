@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise RAG Assistant</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --user-msg-bg: #2563eb;
+            --bot-msg-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            background-color: #dcfce7;
+            color: #166534;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        #chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .message {
+            display: flex;
+            gap: 1rem;
+            max-width: 90%;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .user .avatar { background-color: #dbeafe; }
+        .bot .avatar { background-color: #e0e7ff; }
+
+        .bubble {
+            padding: 1rem 1.5rem;
+            border-radius: 1rem;
+            line-height: 1.6;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            position: relative;
+            word-wrap: break-word;
+            overflow-x: auto; 
+        }
+
+        .user .bubble {
+            background-color: var(--user-msg-bg);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .bot .bubble {
+            background-color: var(--bot-msg-bg);
+            color: #1e293b;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* --- UPDATED: Dataframe Table Style --- */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+            font-size: 0.85rem; /* Smaller font for data density */
+            font-family: 'Consolas', 'Monaco', monospace; /* Monospace for numbers */
+            background-color: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            text-transform: none; /* Keep original case */
+            padding: 10px 12px;
+            border-bottom: 2px solid #e2e8f0;
+            white-space: nowrap; /* Prevent headers from wrapping ugly */
+            text-align: left;
+        }
+
+        td {
+            padding: 8px 12px; /* Compact padding */
+            color: #475569;
+            border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #f1f5f9; /* Vertical grid lines */
+            text-align: left;
+        }
+
+        /* Zebra Striping for readability */
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        
+        tr:hover {
+            background-color: #f1f5f9; /* Highlight row on hover */
+        }
+
+        /* Images */
+        .chat-image {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: transform 0.2s;
+            display: block;
+        }
+        .chat-image:hover { transform: scale(1.01); }
+
+        /* Sources */
+        .sources-container {
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            user-select: none;
+        }
+
+        .source-content {
+            display: none;
+            background: #f8fafc;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            margin-top: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: #475569;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .input-area {
+            background: white;
+            padding: 1.5rem 2rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .input-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 1rem 1.25rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        button#send-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button#send-btn:hover { background-color: #1d4ed8; }
+        button#send-btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+        }
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: #94a3b8;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <span>🧠</span> Multi-RAG Assistant
+        </div>
+        <div class="status-badge" id="system-status">● Checking System...</div>
+    </header>
+
+    <div id="chat-container">
+        <div class="message bot">
+            <div class="avatar">🤖</div>
+            <div class="bubble">
+                Hello! I can help with Text, Tables, Images, and Formulas.
+                <br><br>
+                Try: <b>"Show me Table 1"</b> or <b>"Explain the architecture diagram"</b>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-wrapper">
+            <input type="text" id="user-input" placeholder="Ask a question..." autocomplete="off">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusBadge = document.getElementById('system-status');
+
+        // Poll for system status
+        setInterval(async () => {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                statusBadge.innerText = data.ready ? "● System Online" : "● " + data.message;
+                statusBadge.style.backgroundColor = data.ready ? "#dcfce7" : "#fff7ed";
+                statusBadge.style.color = data.ready ? "#166534" : "#c2410c";
+            } catch (e) {}
+        }, 2000);
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+
+        sendBtn.addEventListener('click', handleSend);
+
+        async function handleSend() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            userInput.value = '';
+            sendBtn.disabled = true;
+            const loadingId = addLoading();
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: text })
+                });
+
+                const data = await response.json();
+                removeMessage(loadingId);
+                
+                if (response.ok) {
+                    addMessage(data.answer, 'bot', data.sources, data.images);
+                } else {
+                    addMessage("Error: " + (data.detail || "Something went wrong"), 'bot');
+                }
+
+            } catch (error) {
+                removeMessage(loadingId);
+                console.error(error);
+                addMessage("Network Error: Could not connect to server.", 'bot');
+            }
+
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+
+        function addMessage(text, sender, sources = [], images = []) {
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            
+            const avatar = sender === 'user' ? '🧑‍💻' : '🤖';
+            
+            // 1. Convert Markdown to HTML
+            let htmlContent = marked.parse(text);
+
+            // 2. Build Images HTML
+            let imagesHtml = '';
+            if (images && images.length > 0) {
+                imagesHtml = images.map(src => 
+                    `<img src="${src}" class="chat-image" alt="Retrieved Diagram" onclick="window.open(this.src, '_blank')">`
+                ).join('');
+            }
+
+            // 3. Build Sources HTML
+            let sourcesHtml = '';
+            if (sources && sources.length > 0) {
+                sourcesHtml = `
+                    <div class="sources-container">
+                        <div class="source-title" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'block' ? 'none' : 'block'">
+                            📚 View ${sources.length} Sources 
+                            <span style="font-size: 0.7em">▼</span>
+                        </div>
+                        <div class="source-content">
+                            ${sources.map((s, i) => `[${i+1}] ${s}`).join('\n\n')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            div.innerHTML = `
+                <div class="avatar">${avatar}</div>
+                <div class="bubble">
+                    ${htmlContent}
+                    ${imagesHtml}
+                    ${sourcesHtml}
+                </div>
+            `;
+            
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // 4. TRIGGER MATH RENDERER
+            if (window.MathJax) {
+                window.MathJax.typesetPromise([div]).catch((err) => console.log(err));
+            }
+        }
+
+        function addLoading() {
+            const id = 'loading-' + Date.now();
+            const div = document.createElement('div');
+            div.className = 'message bot';
+            div.id = id;
+            div.innerHTML = `
+                <div class="avatar">🤖</div>
+                <div class="bubble">
+                    <div class="typing-indicator"><span></span><span></span><span></span></div>
+                </div>
+            `;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return id;
+        }
+
+        function removeMessage(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+    </script>
+</body>
+</html>
