@@ -7,6 +7,7 @@ This project is a complete production-style **RAG system** designed to process l
 **Features**
 
 **✔ Automatic PDF ingestion at server startup**
+
 **✔ Extracts all useful content types**
   - Text chunking (Recursive splitter)
   - Table extraction using Camelot
